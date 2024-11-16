@@ -5,6 +5,7 @@ from fastapi import FastAPI, Header, HTTPException
 from typing import Union, List, Optional
 import pandas as pd
 import os
+import json
 
 app = FastAPI()
 
@@ -64,16 +65,28 @@ def read_item(request: InvokeRequest, x_api_key: Annotated[str | None, Header()]
         
     ticker = yf.Ticker(request.symbol)
     method = getattr(ticker, request.method, None)
+
     if method is None:
-        raise HTTPException(
-            status_code=404, detail="Method not found"
-        )
+        raise HTTPException( status_code=404, detail="Method not found")
+
     if isinstance(method, dict):
         return method
+
+    if isinstance(method, pd.Series): 
+        return method.to_dict()
+
+    if isinstance(method, pd.DataFrame): 
+        return method.to_dict(orient='series')
+
+    if request.params is None:
+        result = method()
     else:
         result = method(**request.params)
-        if isinstance(result, pd.DataFrame):
-            print('here')
-            return result.to_dict()
-        else:
-            return result
+
+    if isinstance(result, dict):
+        return result
+
+    if isinstance(result, pd.Series): 
+        return method.to_dict()
+
+    return method.to_dict(orient='records')
