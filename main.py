@@ -40,7 +40,7 @@ class InvokeRequest(BaseModel):
 
 
 @app.get("/api/info")
-def read_root():
+async def read_root():
     # read version from file
     version = None
     with open('last-release-version.txt') as f:
@@ -49,9 +49,30 @@ def read_root():
     yfinanceVersion = yf.__version__
     return {"hello": "world", "version": version if version else "unknown", "now": pd.Timestamp.now(), "yfinanceVersion": yfinanceVersion}
 
+@app.get("/api/{ticker}/info")
+async def read_info(ticker):
+    t = yf.Ticker(ticker)
+    return t.info
 
-@app.post("/api/invoke/ticker")
-def read_item(request: InvokeRequest, x_api_key: Annotated[str | None, Header()] = None):
+@app.post("/api/quotes")
+async def read_quotes(request: str):
+    d = yf.download(request, period="1d")['Close'].to_dict(orient='series')
+    for k,v in d.items():
+        d[k] = v[-1]
+    return d
+
+@app.post("/api/dividends")
+async def read_divs(request: str):
+    df = yf.download(request, period="2y", actions=True)["Dividends"]
+    d = df.to_dict(orient='series')
+    # Each element in the dictionary is a pandas series of (date, dividend) pairs
+    # Remove each element in the series that is 0
+    for k, v in d.items():
+        d[k] = v[v != 0]
+    return d
+
+@app.post("/api/invoke")
+async def read_item(request: InvokeRequest, x_api_key: Annotated[str | None, Header()] = None):
     if apiKeyPresent:
         if x_api_key is None:
             raise HTTPException(
